@@ -8,10 +8,13 @@
  *   permissions are; "Do not create fake property records" (Task 2)
  *   refers to rows in the `properties` table, which this script still
  *   does not create.
+ * - LocationNode reference data: real Addis Ababa subcities, added after
+ *   discovering none had ever been seeded (every location used in
+ *   integration tests was ad-hoc, throwaway test data).
  *
  * Idempotent: safe to run multiple times against the same database, since
  * every row is upserted on its natural unique key (permission `key`,
- * role `name`, property type `key`).
+ * role `name`, property type `key`, location `slug`).
  */
 import { PrismaClient } from "@prisma/client";
 import { PERMISSIONS } from "../src/modules/identity/permissions";
@@ -26,6 +29,21 @@ const PROPERTY_TYPES = [
   { key: "commercial", label: "Commercial" },
   { key: "office", label: "Office" },
   { key: "other", label: "Other" },
+] as const;
+
+const CITY = { slug: "addis-ababa", name: "Addis Ababa", level: "city" as const };
+
+const SUBCITIES = [
+  { slug: "bole", name: "Bole" },
+  { slug: "yeka", name: "Yeka" },
+  { slug: "nifas-silk-lafto", name: "Nifas Silk-Lafto" },
+  { slug: "kirkos", name: "Kirkos" },
+  { slug: "arada", name: "Arada" },
+  { slug: "addis-ketema", name: "Addis Ketema" },
+  { slug: "akaky-kaliti", name: "Akaky Kaliti" },
+  { slug: "gulele", name: "Gulele" },
+  { slug: "kolfe-keranio", name: "Kolfe Keranio" },
+  { slug: "lideta", name: "Lideta" },
 ] as const;
 
 const ROLES: { name: string; description: string; permissions: string[] }[] = [
@@ -166,8 +184,27 @@ async function main() {
     });
   }
 
+  const city = await prisma.locationNode.upsert({
+    where: { slug: CITY.slug },
+    update: { name: CITY.name },
+    create: { slug: CITY.slug, name: CITY.name, level: CITY.level },
+  });
+
+  for (const subcity of SUBCITIES) {
+    await prisma.locationNode.upsert({
+      where: { slug: subcity.slug },
+      update: { name: subcity.name, parentId: city.id },
+      create: {
+        slug: subcity.slug,
+        name: subcity.name,
+        level: "subcity",
+        parentId: city.id,
+      },
+    });
+  }
+
   console.log(
-    `Seeded ${PERMISSIONS.length} permissions, ${ROLES.length} roles, and ${PROPERTY_TYPES.length} property types.`
+    `Seeded ${PERMISSIONS.length} permissions, ${ROLES.length} roles, ${PROPERTY_TYPES.length} property types, and ${SUBCITIES.length + 1} locations.`
   );
 }
 
